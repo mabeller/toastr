@@ -29,5 +29,15 @@ module Toastr
       ::Toastr::Job.perform_later self
     end
 
+    def is_stale?(options)
+      if options[:expire_in].present?
+        self.updated_at < options[:expire_in].ago
+      elsif options[:expire_if].present?
+        options[:expire_if].yield(self)
+      else
+        self.parent.updated_at > self.updated_at
+      end
+    end
+
   end
 end

@@ -18,14 +18,27 @@ module Toastr
 
           case toast.status.to_sym
           when :cached
-            Toastr.queue_if_stale!(self, toast, options)
-            toast.cache_json
+            if toast.is_stale?(options)
+              toast.queue!
+              return toast.cache_json.merge('toastr' => (toast.cache_json['toastr'] || {}).merge('stale' => true)) unless Rails.application.config.active_job.queue_adapter == :inline
+            end
+            toast.cache_json.merge('toastr' => (toast.cache_json['toastr'] || {}).merge('stale' => false))
           when :empty
             toast.queue!
-            toast.reload if Rails.application.config.active_job.queue_adapter == :inline
-            toast.cache_json || options[:empty_cache_json] || { error: 'Data not yet available' }
+            if Rails.application.config.active_job.queue_adapter == :inline
+              toast.reload
+              toast.cache_json.merge('toastr' => (toast.cache_json['toastr'] || {}).merge('stale' => false))
+            elsif options[:empty_cache_json].present?
+              options[:empty_cache_json]
+            else
+              {'toastr' => {'error' => 'Data not yet available' }}
+            end
           when :queued
-            toast.cache_json.present? ? toast.cache_json : (options[:empty_cache_json] || { error: 'Data not yet available' })
+            if toast.cache_json.present?
+              toast.cache_json.merge('toastr' => (toast.cache_json['toastr'] || {}).merge('stale' => true))
+            else
+              (options[:empty_cache_json] || {'toastr' => {'error' => 'Data not yet available'} })
+            end
           end
         end
 
